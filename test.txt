@@ -1,1 +1,21 @@
-This is for testing
+# This is for testing review comments
+
+import requests
+
+def get_user_data(user_id):
+    url = f"https://api.example.com/users/{user_id}"
+
+    # No timeout
+    response = requests.get(url)
+
+    # No status code validation
+    data = response.json()
+
+    # Logging sensitive data
+    print(f"Retrieved user data: {data}")
+
+    return data
+This is for testing github app integration
+kfjvj
+jfvbjiijnvjn
+jcnjnjnjThis is for testing
