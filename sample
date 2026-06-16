@@ -1,0 +1,653 @@
+import logging
+from datetime import datetime, timezone
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from app.core.collections.enterprise_assigned_integrations import (
+    COLLECTION as ENT_ASSIGNED_COLLECTION,
+)
+
+from app.core.collections.enterprise_products import (
+    COLLECTION as ENTERPRISE_PRODUCTS_COLLECTION,
+)
+from app.core.collections.integrations import COLLECTION as INTEGRATIONS_COLLECTION
+from app.core.collections.user_assigned_integrations import (
+    COLLECTION as USER_ASSIGNED_COLLECTION,
+)
+from app.core.collections.user_products import COLLECTION as USER_PRODUCTS_COLLECTION
+from app.core.collections.users import COLLECTION as USERS_COLLECTION
+from app.core.helpers import (
+    exclude_stumpmic_admin_users,
+    matches_date_range,
+    require_db,
+    require_enterprise_context,
+    serialize_doc,
+)
+from app.dto import request, response
+
+
+class UpdateUserProductsRequest(BaseModel):
+    product_ids: List[str]
+
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+def _build_user_product_map(db, enterprise_id: str) -> dict:
+    """Return {user_id: [product_id, ...]} for all users in the enterprise."""
+    docs = list(
+        db.client.collection(USER_PRODUCTS_COLLECTION)
+        .where("enterprise_id", "==", enterprise_id)
+        .stream()
+    )
+    result: dict = {}
+    for doc in docs:
+        d = doc.to_dict()
+        uid = d.get("user_id")
+        pid = d.get("product_id")
+        if uid and pid:
+            result.setdefault(uid, []).append(pid)
+    return result
+
+
+def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
+    """Return list of product_ids assigned to a single user."""
+    docs = list(
+        db.client.collection(USER_PRODUCTS_COLLECTION)
+        .where("user_id", "==", user_id)
+        .where("enterprise_id", "==", enterprise_id)
+        .stream()
+    )
+    return [
+        d.to_dict().get("product_id") for d in docs if d.to_dict().get("product_id")
+    ]
+
+
+@router.get(
+    "/search",
+    response_model=response.ApiListResponse,
+    summary="Search users by domain for adding to the enterprise",
+)
+async def search_users(
+    q: str = "",
+    page: int = 1,
+    page_size: int = 20,
+    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
+):
+    db = require_db()
+    enterprise_domain = admin_ctx.get("enterprise_domain", "")
+
+    if not enterprise_domain:
+        return response.ApiListResponse(
+            success=True,
+            message="No enterprise domain configured",
+            data=[],
+        )
+
+    try:
+        domain = enterprise_domain.lower()
+        # Use indexed query on precomputed email_domain + enterprise_id instead of full scan
+        candidates = list(
+            db.client.collection(USERS_COLLECTION)
+            .where("email_domain", "==", domain)
+            .where("enterprise_id", "==", None)
+            .limit(1000)
+            .stream()
+        )
+
+        if q:
+            s = q.lower().strip()
+            candidates = [
+                d
+                for d in candidates
+                if (ud := d.to_dict())
+                and (
+                    s in ud.get("display_name", "").lower()
+                    or s in ud.get("email", "").lower()
+                )
+            ]
+
+        total_count = len(candidates)
+        total_pages = max(1, -(-total_count // page_size))
+        start = (page - 1) * page_size
+        page_docs = candidates[start : start + page_size]
+
+        return response.ApiListResponse(
+            success=True,
+            message=f"Found {total_count} user(s) matching domain @{enterprise_domain}",
+            data=[response.UserData(**serialize_doc(d)) for d in page_docs],
+            pagination=response.PaginationMeta(
+                page=page,
+                page_size=page_size,
+                total_count=total_count,
+                total_pages=total_pages,
+                has_next=page < total_pages,
+                has_previous=page > 1,
+            ),
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Error searching users for enterprise domain {enterprise_domain}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Failed to search users")
+
+
+@router.post(
+    "/add",
+    response_model=response.ApiResponse,
+    status_code=201,
+    summary="Add a user to the enterprise",
+)
+async def add_user(
+    data: request.AddEnterpriseUserRequest,
+    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
+):
+    db = require_db()
+    enterprise_id = admin_ctx["enterprise_id"]
+    admin_user = admin_ctx["user"]
+    email = data.email.lower().strip()
+
+    try:
+        existing = list(
+            db.client.collection(USERS_COLLECTION)
+            .where("email", "==", email)
+            .limit(1)
+            .stream()
+        )
+
+        if not existing:
+            raise HTTPException(status_code=404, detail=f"User '{email}' not found")
+
+        user_doc = existing[0]
+        user_data = user_doc.to_dict()
+
+        if user_data.get("enterprise_id") == enterprise_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"User '{email}' is already a member of this enterprise",
+            )
+        if user_data.get("enterprise_id"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"User '{email}' is already assigned to another enterprise",
+            )
+
+        user_doc.reference.update(
+            {
+                "enterprise_id": enterprise_id,
+                "is_active": True,
+                "role": data.role or "enterprise_user",
+                "display_name": data.display_name or user_data.get("display_name", ""),
+                "updated_at": datetime.now(timezone.utc),
+                "updated_by": admin_user.get("uid", ""),
+            }
+        )
+
+        logger.info(
+            f"User {email} added to enterprise {enterprise_id} by admin {admin_user.get('email')}"
+        )
+
+        return response.ApiResponse(
+            success=True,
+            message=f"User '{email}' added to enterprise successfully",
+            data=response.UserData(**serialize_doc(user_doc.reference.get())),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding user {email} to enterprise {enterprise_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to add user to enterprise")
+
+
+@router.get(
+    "/",
+    response_model=response.ApiListResponse,
+    summary="List all users in the enterprise",
+)
+async def list_users(
+    params: request.ListEnterpriseUserQueryParams = Depends(),
+    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
+):
+    db = require_db()
+    enterprise_id = admin_ctx["enterprise_id"]
+
+    try:
+        query = db.client.collection(USERS_COLLECTION)
+        query = query.where("enterprise_id", "==", enterprise_id)
+
+        if params.role:
+            query = query.where("role", "==", params.role)
+
+        all_docs = list(query.stream())
+
+        if params.is_active is not None:
+            all_docs = [
+                d
+                for d in all_docs
+                if d.to_dict().get("is_active", False) == params.is_active
+            ]
+
+        if params.created_from or params.created_to:
+            all_docs = [
+                d
+                for d in all_docs
+                if matches_date_range(
+                    d.to_dict().get("created_at"),
+                    params.created_from,
+                    params.created_to,
+                )
+            ]
+
+        if params.search:
+            s = params.search.lower().strip()
+            all_docs = [
+                d
+                for d in all_docs
+                if (ud := d.to_dict())
+                and (
+                    s in ud.get("display_name", "").lower()
+                    or s in ud.get("email", "").lower()
+                )
+            ]
+
+        all_docs = exclude_stumpmic_admin_users(all_docs)
+
+        # Batch-fetch product assignments for all enterprise users
+        product_map = _build_user_product_map(db, enterprise_id)
+
+        total_count = len(all_docs)
+        total_pages = max(1, -(-total_count // params.page_size))
+
+        start = (params.page - 1) * params.page_size
+        page_docs = all_docs[start : start + params.page_size]
+
+        users_data = []
+        for d in page_docs:
+            try:
+                user_dict = serialize_doc(d)
+                user_dict["product_ids"] = product_map.get(d.id, [])
+                users_data.append(response.UserData(**user_dict))
+            except Exception as user_err:
+                logger.warning(f"Skipping malformed user doc {d.id}: {user_err}")
+
+        return response.ApiListResponse(
+            success=True,
+            message=f"Found {total_count} user(s) in enterprise",
+            data=users_data,
+            pagination=response.PaginationMeta(
+                page=params.page,
+                page_size=params.page_size,
+                total_count=total_count,
+                total_pages=total_pages,
+                has_next=params.page < total_pages,
+                has_previous=params.page > 1,
+            ),
+        )
+
+    except Exception as e:
+        logger.error(f"Error listing enterprise users: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list enterprise users")
+
+
+@router.get(
+    "/{user_id}",
+    response_model=response.ApiResponse,
+    summary="Get specific user details in the enterprise",
+)
+async def get_user_details(
+    user_id: str,
+    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
+):
+    db = require_db()
+    enterprise_id = admin_ctx["enterprise_id"]
+
+    doc = db.client.collection(USERS_COLLECTION).document(user_id).get()
+    if not doc.exists or doc.to_dict().get("enterprise_id") != enterprise_id:
+        raise HTTPException(status_code=404, detail="User not found in this enterprise")
+
+    user_dict = serialize_doc(doc)
+    user_dict["product_ids"] = _get_user_product_ids(db, user_id, enterprise_id)
+
+    return response.ApiResponse(
+        success=True,
+        message="User details retrieved successfully",
+        data=response.UserData(**user_dict),
+    )
+
+
+@router.patch(
+    "/{user_id}/status",
+    response_model=response.ApiResponse,
+    summary="Update a user's status in the enterprise",
+)
+async def update_user_status(
+    user_id: str,
+    data: request.UpdateEnterpriseUserStatusRequest,
+    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
+):
+    admin_uid = admin_ctx["user"].get("uid", "")
+
+    # ✅ Check self before hitting the DB
+    if user_id == admin_uid:
+        raise HTTPException(status_code=400, detail="Cannot change your own status")
+    db = require_db()
+    admin_uid = admin_ctx["user"].get("uid", "")
+
+    if user_id == admin_uid:
+        raise HTTPException(status_code=400, detail="Cannot change your own status")
+
+    doc_ref = db.client.collection(USERS_COLLECTION).document(user_id)
+    doc = doc_ref.get()
+
+    if (
+        not doc.exists
+        or doc.to_dict().get("enterprise_id") != admin_ctx["enterprise_id"]
+    ):
+        raise HTTPException(status_code=404, detail="User not found in this enterprise")
+
+    doc_ref.update(
+        {
+            "is_active": data.is_active,
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": admin_uid,
+        }
+    )
+
+    status_label = "activated" if data.is_active else "deactivated"
+    logger.info(
+        f"User {doc.to_dict().get('email')} {status_label} in enterprise {admin_ctx['enterprise_id']}"
+    )
+
+    return response.ApiResponse(
+        success=True,
+        message=f"User {status_label} successfully",
+        data=response.UserData(**serialize_doc(doc_ref.get())),
+    )
+
+
+@router.delete(
+    "/{user_id}",
+    response_model=response.ApiResponse,
+    summary="Remove a user from the enterprise",
+)
+async def remove_user(
+    user_id: str,
+    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
+):
+    admin_uid = admin_ctx["user"].get("uid", "")
+
+    # ✅ Check self before hitting the DB
+    if user_id == admin_uid:
+        raise HTTPException(
+            status_code=400, detail="Cannot remove yourself from the enterprise"
+        )
+    db = require_db()
+    admin_uid = admin_ctx["user"].get("uid", "")
+    enterprise_id = admin_ctx["enterprise_id"]
+
+    if user_id == admin_uid:
+        raise HTTPException(
+            status_code=400, detail="Cannot remove yourself from the enterprise"
+        )
+
+    doc_ref = db.client.collection(USERS_COLLECTION).document(user_id)
+    doc = doc_ref.get()
+
+    if not doc.exists or doc.to_dict().get("enterprise_id") != enterprise_id:
+        raise HTTPException(status_code=404, detail="User not found in this enterprise")
+
+    doc_ref.update(
+        {
+            "enterprise_id": None,
+            "is_active": False,
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": admin_uid,
+        }
+    )
+
+    # Clean up user_products for this user
+    up_docs = list(
+        db.client.collection(USER_PRODUCTS_COLLECTION)
+        .where("user_id", "==", user_id)
+        .where("enterprise_id", "==", enterprise_id)
+        .stream()
+    )
+    for up in up_docs:
+        up.reference.delete()
+
+    logger.info(
+        f"User {doc.to_dict().get('email')} removed from enterprise {enterprise_id} by admin {admin_ctx['user'].get('email')}"
+    )
+
+    return response.ApiResponse(
+        success=True,
+        message="User removed from enterprise successfully",
+        data=response.UserData(**serialize_doc(doc_ref.get())),
+    )
+
+
+@router.post(
+    "/{user_id}/integrations",
+    response_model=response.ApiResponse,
+    status_code=201,
+    summary="Assign integration to an enterprise user",
+)
+async def assign_user_integration(
+    user_id: str,
+    data: request.AssignUserIntegrationRequest,
+    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
+):
+    db = require_db()
+    enterprise_id = admin_ctx["enterprise_id"]
+    admin_uid = admin_ctx["user"].get("uid")
+
+    try:
+        # Verify user belongs to this enterprise
+        user_doc = db.client.collection(USERS_COLLECTION).document(user_id).get()
+
+        if (
+            not user_doc.exists
+            or user_doc.to_dict().get("enterprise_id") != enterprise_id
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="User not found in this enterprise",
+            )
+
+        if user_doc.to_dict().get("role") == "stumpmic_admin":
+            raise HTTPException(
+                status_code=400,
+                detail="Platform administrators cannot be assigned integrations from the enterprise console",
+            )
+
+        # Integration must be globally available
+        integration_doc = (
+            db.client.collection(INTEGRATIONS_COLLECTION)
+            .document(data.integration_id)
+            .get()
+        )
+        if not integration_doc.exists:
+            raise HTTPException(
+                status_code=404, detail="Integration not found in catalog"
+            )
+
+        integration_catalog = integration_doc.to_dict()
+        if not integration_catalog.get("is_active") or not integration_catalog.get(
+            "is_visible"
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="This integration is not available",
+            )
+
+        # Integration must be actively assigned to this enterprise
+        try:
+            enterprise_assignment = list(
+                db.client.collection(ENT_ASSIGNED_COLLECTION)
+                .where("enterprise_id", "==", enterprise_id)
+                .where("integration_id", "==", data.integration_id)
+                .where("is_active", "==", True)
+                .limit(1)
+                .stream()
+            )
+        except Exception as e:
+            logger.error(f"Failed to query enterprise assignment: {e}")
+            raise HTTPException(
+                status_code=500, detail="Database error occurred"
+            ) from e
+        if not enterprise_assignment:
+            raise HTTPException(
+                status_code=403,
+                detail="Integration is not assigned to this enterprise",
+            )
+
+        # Check if integration already assigned to this user
+        existing = list(
+            db.client.collection(USER_ASSIGNED_COLLECTION)
+            .where("enterprise_id", "==", enterprise_id)
+            .where("user_id", "==", user_id)
+            .where("integration_id", "==", data.integration_id)
+            .limit(1)
+            .stream()
+        )
+
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail="Integration already assigned to this user",
+            )
+
+        now = datetime.now(timezone.utc)
+
+        integration_data = {
+            "enterprise_id": enterprise_id,
+            "user_id": user_id,
+            "product_id": data.product_id,
+            "integration_id": data.integration_id,
+            "access_level": data.access_level,
+            "is_active": True,
+            "assigned_by": admin_uid,
+            "assigned_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        doc_ref = db.client.collection(USER_ASSIGNED_COLLECTION).document()
+        doc_ref.set(integration_data)
+
+        logger.info(
+            f"Integration {data.integration_id} assigned to user {user_id} "
+            f"in enterprise {enterprise_id} by admin {admin_uid}"
+        )
+
+        return response.ApiResponse(
+            success=True,
+            message="Integration assigned to user successfully",
+            data={"assignment_id": doc_ref.id, **integration_data},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error assigning integration to user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to assign integration")
+
+
+@router.patch(
+    "/{user_id}/products",
+    response_model=response.ApiResponse,
+    summary="Update products assigned to a user in the enterprise",
+)
+async def update_user_products(
+    user_id: str,
+    data: UpdateUserProductsRequest,
+    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
+):
+    db = require_db()
+    admin_uid = admin_ctx["user"].get("uid", "")
+    enterprise_id = admin_ctx["enterprise_id"]
+
+    doc_ref = db.client.collection(USERS_COLLECTION).document(user_id)
+    doc = doc_ref.get()
+
+    if not doc.exists or doc.to_dict().get("enterprise_id") != enterprise_id:
+        raise HTTPException(status_code=404, detail="User not found in this enterprise")
+
+    if doc.to_dict().get("role") == "stumpmic_admin":
+        raise HTTPException(
+            status_code=400,
+            detail="Platform administrators cannot be assigned products from the enterprise console",
+        )
+
+    # Validate all requested product_ids are actively assigned to this enterprise
+    if data.product_ids:
+        valid_product_ids = {
+            d.to_dict().get("product_id")
+            for d in db.client.collection(ENTERPRISE_PRODUCTS_COLLECTION)
+            .where("enterprise_id", "==", enterprise_id)
+            .where("is_active", "==", True)
+            .stream()
+            if d.to_dict().get("product_id")
+        }
+        invalid_ids = [pid for pid in data.product_ids if pid not in valid_product_ids]
+        if invalid_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Products not assigned to this enterprise: {invalid_ids}",
+            )
+
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Fetch existing user_products to delete
+        existing = list(
+            db.client.collection(USER_PRODUCTS_COLLECTION)
+            .where("user_id", "==", user_id)
+            .where("enterprise_id", "==", enterprise_id)
+            .stream()
+        )
+
+        # Use a batch write so deletes + creates are atomic
+        batch = db.client.batch()
+
+        for up in existing:
+            batch.delete(up.reference)
+
+        for product_id in data.product_ids:
+            new_ref = db.client.collection(USER_PRODUCTS_COLLECTION).document()
+            batch.set(
+                new_ref,
+                {
+                    "user_id": user_id,
+                    "product_id": product_id,
+                    "enterprise_id": enterprise_id,
+                    "is_active": True,
+                    "assigned_at": now,
+                    "assigned_by": admin_uid,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+
+        batch.commit()
+
+        logger.info(
+            f"Products updated for user {doc.to_dict().get('email')} in enterprise {enterprise_id}"
+        )
+
+        user_dict = serialize_doc(doc)
+        user_dict["product_ids"] = list(data.product_ids)
+
+        return response.ApiResponse(
+            success=True,
+            message="User products updated successfully",
+            data=response.UserData(**user_dict),
+        )
+
+    except Exception as e:
+        logger.error(f"Error updating products for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update user products")
