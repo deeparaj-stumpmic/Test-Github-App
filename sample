@@ -359,6 +359,80 @@ async def update_user_status(
         }
     )
 
+@router.get(
+    "/search",
+    response_model=response.ApiListResponse,
+    summary="Search users by domain for adding to the enterprise",
+)
+async def search_users(
+    q: str = "",
+    page: int = 1,
+    page_size: int = 20,
+    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
+):
+    db = require_db()
+    enterprise_domain = admin_ctx.get("enterprise_domain", "")
+
+    if not enterprise_domain:
+        return response.ApiListResponse(
+            success=True,
+            message="No enterprise domain configured",
+            data=[],
+        )
+
+    try:
+        domain = enterprise_domain.lower()
+        # Use indexed query on precomputed email_domain + enterprise_id instead of full scan
+        candidates = list(
+            db.client.collection(USERS_COLLECTION)
+            .where("email_domain", "==", domain)
+            .where("enterprise_id", "==", None)
+            .limit(1000)
+            .stream()
+        )
+
+        if q:
+            s = q.lower().strip()
+            candidates = [
+                d
+                for d in candidates
+                if (ud := d.to_dict())
+                and (
+                    s in ud.get("display_name", "").lower()
+                    or s in ud.get("email", "").lower()
+                )
+            ]
+
+        total_count = len(candidates)
+        total_pages = max(1, -(-total_count // page_size))
+        start = (page - 1) * page_size
+        page_docs = candidates[start : start + page_size]
+
+        return response.ApiListResponse(
+            success=True,
+            message=f"Found {total_count} user(s) matching domain @{enterprise_domain}",
+            data=[response.UserData(**serialize_doc(d)) for d in page_docs],
+            pagination=response.PaginationMeta(
+                page=page,
+                page_size=page_size,
+                total_count=total_count,
+                total_pages=total_pages,
+                has_next=page < total_pages,
+                has_previous=page > 1,
+            ),
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Error searching users for enterprise domain {enterprise_domain}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Failed to search users")
+
+
+@router.post(
+    "/add",
+    response_model=response.ApiResponse,
+    status_code=201,
     status_label = "activated" if data.is_active else "deactivated"
     logger.info(
         f"User {doc.to_dict().get('email')} {status_label} in enterprise {admin_ctx['enterprise_id']}"
