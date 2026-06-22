@@ -12,7 +12,6 @@ hbchbhb
 'wrjjiv uhr
 ojefhvhriv
 rvjirebijvnk
-rf//43@Q@45
 from app.core.collections.enterprise_products import (
     COLLECTION as ENTERPRISE_PRODUCTS_COLLECTION,
 )
