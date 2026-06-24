@@ -51,26 +51,6 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
     ]
 
 
-@router.get(
-    "/search",
-    response_model=response.ApiListResponse,
-    summary="Search users by domain for adding to the enterprise",
-)
-async def search_users(
-    q: str = "",
-    page: int = 1,
-    page_size: int = 20,
-    admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
-):
-    db = require_db()
-    enterprise_domain = admin_ctx.get("enterprise_domain", "")
-
-    if not enterprise_domain:
-        return response.ApiListResponse(
-            success=True,
-            message="No enterprise domain configured",
-            data=[],
-        )
 
     try:
         domain = enterprise_domain.lower()
