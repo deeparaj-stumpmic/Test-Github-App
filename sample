@@ -1,19 +1,5 @@
 import logging
-from datetime import datetime, timezone
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from app.core.collections.enterprise_assigned_integrations import (
-    COLLECTION as ENT_ASSIGNED_COLLECTION,
-)
 
-from app.core.collections.enterprise_products import (
-    COLLECTION as ENTERPRISE_PRODUCTS_COLLECTION,
-)
-from app.core.collections.integrations import COLLECTION as INTEGRATIONS_COLLECTION
-from app.core.collections.user_assigned_integrations import (
-    COLLECTION as USER_ASSIGNED_COLLECTION,
-)
 from app.core.collections.user_products import COLLECTION as USER_PRODUCTS_COLLECTION
 from app.core.collections.users import COLLECTION as USERS_COLLECTION
 from app.core.helpers import (
@@ -25,7 +11,7 @@ from app.core.helpers import (
 )
 from app.dto import request, response
 
-
+///3243
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 
