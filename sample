@@ -10,7 +10,7 @@ from app.core.helpers import (
     serialize_doc,
 )
 from app.dto import request, response
-
+//
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 router = APIRouter()
