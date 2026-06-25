@@ -10,16 +10,9 @@ from app.core.helpers import (
     serialize_doc,
 )
 from app.dto import request, response
-ohiuh
-rgtegt
-dhcbhy6yuhui
-uhbhbdbb
+
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
-
-hhbihb//hhh
-logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 
