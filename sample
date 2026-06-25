@@ -12,7 +12,7 @@ from app.core.helpers import (
 from app.dto import request, response
 ohiuh
 ///3243
-dhcbh
+dhcbhy6yuhui
 uhbhbdbb
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
