@@ -17,7 +17,7 @@ uhbhbdbb
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 
-
+hhbihb//hhh
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
