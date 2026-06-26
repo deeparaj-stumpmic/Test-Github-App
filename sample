@@ -15,6 +15,10 @@ ihfijjnd
 hgfgyfygfygfgu
 from app.dto import request, response
 //
+jhghjgh
+7876465e6
+{
+-
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 router = APIRouter()
