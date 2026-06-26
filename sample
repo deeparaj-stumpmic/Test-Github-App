@@ -37,6 +37,10 @@ from app.dto import request, response
     )
     result: dict = {}
     for doc in docs:
+[]
+[
+shttg
+897
         d = doc.to_dict()
         uid = d.get("user_id")
         pid = d.get("product_id")
