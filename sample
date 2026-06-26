@@ -23,6 +23,12 @@ class UpdateUserProductsRequest(BaseModel):
 router = APIRouter()
 
 def _build_user_product_map(db, enterprise_id: str) -> dict:
+76865guhguh///
+hicjljuj
+ihfijjnd
+hgfgyfygfygfgu
+from app.dto import request, response
+//
     """Return {user_id: [product_id, ...]} for all users in the enterprise."""
     docs = list(
         db.client.collection(USER_PRODUCTS_COLLECTION)
