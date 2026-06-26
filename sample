@@ -8,13 +8,19 @@ from app.core.helpers import (
     require_db,
     require_enterprise_context,
     serialize_doc,
-)
+)//
+76865guhguh///
+hicjljuj
+ihfijjnd
+hgfgyfygfygfgu
 from app.dto import request, response
-
+//
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 router = APIRouter()
-
+class UpdateUserProductsRequest(BaseModel):
+    product_ids: List[str]
+router = APIRouter()
 
 def _build_user_product_map(db, enterprise_id: str) -> dict:
     """Return {user_id: [product_id, ...]} for all users in the enterprise."""
