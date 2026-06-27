@@ -18,6 +18,9 @@ from app.dto import request, response
 jhghjgh
 7876465e6
 {
+989887
+iuyuigdfhb
+766755
 -
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
