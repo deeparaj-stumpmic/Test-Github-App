@@ -22,6 +22,9 @@ jhghjgh
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 router = APIRouter()
+[]po0-98976
+6fgugiuhlikjk;l'gh34324
+hfrtdy
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 router = APIRouter()
