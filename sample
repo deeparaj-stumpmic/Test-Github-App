@@ -3,26 +3,17 @@ import logging
 from app.core.collections.user_products import COLLECTION as USER_PRODUCTS_COLLECTION
 from app.core.collections.users import COLLECTION as USERS_COLLECTION
 from app.core.helpers import (
-    exclude_stumpmic_admin_users,
-    matches_date_range,
-    require_db,
-    require_enterprise_context,
-    serialize_doc,
-)
+ 
 from app.dto import request, response
 
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 router = APIRouter()
+09{
 
-
-def _build_user_product_map(db, enterprise_id: str) -> dict:
-    """Return {user_id: [product_id, ...]} for all users in the enterprise."""
-    docs = list(
-        db.client.collection(USER_PRODUCTS_COLLECTION)
-        .where("enterprise_id", "==", enterprise_id)
+terprise_id", "==", enterprise_id)
         .stream()
-    )
+    
     result: dict = {}
     for doc in docs:
         d = doc.to_dict()
@@ -35,11 +26,7 @@ def _build_user_product_map(db, enterprise_id: str) -> dict:
 
 def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
     """Return list of product_ids assigned to a single user."""
-    docs = list(
-        db.client.collection(USER_PRODUCTS_COLLECTION)
-        .where("user_id", "==", user_id)
-        .where("enterprise_id", "==", enterprise_id)
-        .stream()
+    do
     )
     return [
         d.to_dict().get("product_id") for d in docs if d.to_dict().get("product_id")
@@ -50,12 +37,7 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
     try:
         domain = enterprise_domain.lower()
         # Use indexed query on precomputed email_domain + enterprise_id instead of full scan
-        candidates = list(
-            db.client.collection(USERS_COLLECTION)
-            .where("email_domain", "==", domain)
-            .where("enterprise_id", "==", None)
-            .limit(1000)
-            .stream()
+      
         )
 
         if q:
@@ -89,7 +71,7 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
             ),
         )
 
-    except Exception as e:
+    except  as e:
         logger.error(
             f"Error searching users for enterprise domain {enterprise_domain}: {e}"
         )
@@ -98,11 +80,6 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
 
 @router.post(
     "/add",
-    response_model=response.ApiResponse,
-    status_code=201,
-    summary="Add a user to the enterprise",
-)
-async def add_user(
     data: request.AddEnterpriseUserRequest,
     admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
 ):
@@ -130,9 +107,7 @@ async def add_user(
                 status_code=400,
                 detail=f"User '{email}' is already a member of this enterprise",
             )
-        if user_data.get("enterprise_id"):
-            raise HTTPException(
-                status_code=400,
+  
                 detail=f"User '{email}' is already assigned to another enterprise",
             )
 
