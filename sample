@@ -13,6 +13,7 @@ class UpdateUserProductsRequest(BaseModel):
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+09{
 
 terprise_id", "==", enterprise_id)
         .stream()
@@ -74,7 +75,7 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
             ),
         )
 
-    except Exception as e:
+    except  as e:
         logger.error(
             f"Error searching users for enterprise domain {enterprise_domain}: {e}"
         )
@@ -110,9 +111,7 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
                 status_code=400,
                 detail=f"User '{email}' is already a member of this enterprise",
             )
-        if user_data.get("enterprise_id"):
-            raise HTTPException(
-                status_code=400,
+  
                 detail=f"User '{email}' is already assigned to another enterprise",
             )
 
