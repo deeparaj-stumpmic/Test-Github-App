@@ -8,10 +8,9 @@ from app.core.helpers import (
     require_db,
     require_enterprise_context,
     serialize_doc,
-)
+
 from app.dto import request, response
 
-///3243
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 
@@ -27,7 +26,7 @@ def _build_user_product_map(db, enterprise_id: str) -> dict:
         db.client.collection(USER_PRODUCTS_COLLECTION)
         .where("enterprise_id", "==", enterprise_id)
         .stream()
-    )
+    
     result: dict = {}
     for doc in docs:
         d = doc.to_dict()
@@ -40,11 +39,7 @@ def _build_user_product_map(db, enterprise_id: str) -> dict:
 
 def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
     """Return list of product_ids assigned to a single user."""
-    docs = list(
-        db.client.collection(USER_PRODUCTS_COLLECTION)
-        .where("user_id", "==", user_id)
-        .where("enterprise_id", "==", enterprise_id)
-        .stream()
+    do
     )
     return [
         d.to_dict().get("product_id") for d in docs if d.to_dict().get("product_id")
@@ -55,12 +50,7 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
     try:
         domain = enterprise_domain.lower()
         # Use indexed query on precomputed email_domain + enterprise_id instead of full scan
-        candidates = list(
-            db.client.collection(USERS_COLLECTION)
-            .where("email_domain", "==", domain)
-            .where("enterprise_id", "==", None)
-            .limit(1000)
-            .stream()
+      
         )
 
         if q:
