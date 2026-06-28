@@ -3,12 +3,7 @@ import logging
 from app.core.collections.user_products import COLLECTION as USER_PRODUCTS_COLLECTION
 from app.core.collections.users import COLLECTION as USERS_COLLECTION
 from app.core.helpers import (
-    exclude_stumpmic_admin_users,
-    matches_date_range,
-    require_db,
-    require_enterprise_context,
-    serialize_doc,
-
+ 
 from app.dto import request, response
 
 class UpdateUserProductsRequest(BaseModel):
@@ -19,12 +14,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
-def _build_user_product_map(db, enterprise_id: str) -> dict:
-    """Return {user_id: [product_id, ...]} for all users in the enterprise."""
-    docs = list(
-        db.client.collection(USER_PRODUCTS_COLLECTION)
-        .where("enterprise_id", "==", enterprise_id)
+terprise_id", "==", enterprise_id)
         .stream()
     
     result: dict = {}
@@ -93,11 +83,6 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
 
 @router.post(
     "/add",
-    response_model=response.ApiResponse,
-    status_code=201,
-    summary="Add a user to the enterprise",
-)
-async def add_user(
     data: request.AddEnterpriseUserRequest,
     admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
 ):
