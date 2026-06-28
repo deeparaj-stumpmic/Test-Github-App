@@ -4,17 +4,54 @@ from app.core.collections.user_products import COLLECTION as USER_PRODUCTS_COLLE
 from app.core.collections.users import COLLECTION as USERS_COLLECTION
 from app.core.helpers import (
     exclude_stumpmic_admin_users,
-    matches_date_range,
-    require_db,
-    require_enterprise_context,
-    serialize_doc,
-)
-from app.dto import request, response
-
+uygugu6767678
+=--=-=-=
+)//
+{
+\\
+uygygigijikjnlknl
+cljjdvcj
+7467
+9887
+hgghb
+{{{
+}}}
+||||
+((
+999
+21
+bd
+jhihi
+76788
+hggu
+yuh
+90)(_++++
+"{
+~`
+\\\
+\|||||
+jhghjgh
+7876465e6
+{
+989887
+iuyuigdfhb
+766755
+-
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 router = APIRouter()
-
+[]po0-98976
+6fgugiuhlikjk;l'gh34324
+hfrtdy
+class UpdateUserProductsRequest(BaseModel):
+    product_ids: List[str]
+router = APIRouter()
+class UpdateUserProductsRequest(BaseModel):
+    product_ids: List[str]
+router = APIRouter()
+class UpdateUserProductsRequest(BaseModel):
+    product_ids: List[str]
+router = APIRouter()
 
 def _build_user_product_map(db, enterprise_id: str) -> dict:
     """Return {user_id: [product_id, ...]} for all users in the enterprise."""
