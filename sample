@@ -21,6 +21,22 @@ jhghjgh
 iuyuigdfhb
 766755
 -
+=--=-=-=
+)//
+{
+p090
+++
+"{
+~`
+\\\
+\|||||
+jhghjgh
+7876465e6
+{
+989887
+iuyuigdfhb
+766755
+-hgk
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 router = APIRouter()
