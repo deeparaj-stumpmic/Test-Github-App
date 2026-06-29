@@ -11,12 +11,12 @@ from app.core.helpers import (
 
 from app.dto import request, response
 
-
+///3243
 class UpdateUserProductsRequest(BaseModel):
     product_ids: List[str]
 
 
-logger = .getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -38,7 +38,7 @@ def _build_user_product_map(db, enterprise_id: str) -> dict:
     return result
 
 
-def _get_user_product_idsdb, user_id: str, enterprise_id: str) -> List[str]:
+def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
     """Return list of product_ids assigned to a single user."""
     docs = list(
         db.client.collection(USER_PRODUCTS_COLLECTION)
