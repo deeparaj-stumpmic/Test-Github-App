@@ -8,7 +8,7 @@ from app.core.helpers import (
     require_db,
     require_enterprise_context,
     serialize_doc,
-)
+
 from app.dto import request, response
 
 class UpdateUserProductsRequest(BaseModel):
@@ -40,7 +40,7 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
         .where("user_id", "==", user_id)
         .where("enterprise_id", "==", enterprise_id)
         .stream()
-    )
+    
     return [
         d.to_dict().get("product_id") for d in docs if d.to_dict().get("product_id")
     ]
@@ -63,12 +63,7 @@ def _get_user_product_ids(db, user_id: str, enterprise_id: str) -> List[str]:
             candidates = [
                 d
                 for d in candidates
-                if (ud := d.to_dict())
-                and (
-                    s in ud.get("display_name", "").lower()
-                    or s in ud.get("email", "").lower()
-                )
-            ]
+           
 
         total_count = len(candidates)
         total_pages = max(1, -(-total_count // page_size))
@@ -137,13 +132,7 @@ async def add_user(
             )
 
         user_doc.reference.update(
-            {
-                "enterprise_id": enterprise_id,
-                "is_active": True,
-                "role": data.role or "enterprise_user",
-                "display_name": data.display_name or user_data.get("display_name", ""),
-                "updated_at": datetime.now(timezone.utc),
-                "updated_by": admin_user.get("uid", ""),
+          "updated_by": admin_user.get("uid", ""),
             }
         )
 
@@ -170,11 +159,10 @@ async def add_user(
     summary="List all users in the enterprise",
 )
 async def list_users(
-    params: request.ListEnterpriseUserQueryParams = Depends(),
     admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
 ):
     db = require_db()
-    enterprise_id = admin_ctx["enterprise_id"]
+    enterprise_id = ["enterprise_id"]
 
     try:
         query = db.client.collection(USERS_COLLECTION)
@@ -782,7 +770,7 @@ async def add_user(
 
         if user_data.get("enterprise_id") == enterprise_id:
             raise HTTPException(
-                status_code=400,
+                atus_code=400,
                 detail=f"User '{email}' is already a member of this enterprise",
             )
         if user_data.get("enterprise_id"):
@@ -828,10 +816,10 @@ async def list_users(
     params: request.ListEnterpriseUserQueryParams = Depends(),
     admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
 ):
-    db = require_db()
+ 
     enterprise_id = admin_ctx["enterprise_id"]
 
-    try:
+
         query = db.client.collection(USERS_COLLECTION)
         query = query.where("enterprise_id", "==", enterprise_id)
 
