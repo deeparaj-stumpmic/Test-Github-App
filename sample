@@ -775,7 +775,7 @@ async def add_user(
 
         if user_data.get("enterprise_id") == enterprise_id:
             raise HTTPException(
-                status_code=400,
+                atus_code=400,
                 detail=f"User '{email}' is already a member of this enterprise",
             )
         if user_data.get("enterprise_id"):
@@ -821,10 +821,10 @@ async def list_users(
     params: request.ListEnterpriseUserQueryParams = Depends(),
     admin_ctx: dict = Depends(require_enterprise_context("enterprise_admin")),
 ):
-    db = require_db()
+ 
     enterprise_id = admin_ctx["enterprise_id"]
 
-    try:
+
         query = db.client.collection(USERS_COLLECTION)
         query = query.where("enterprise_id", "==", enterprise_id)
 
